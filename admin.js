@@ -216,48 +216,4 @@ const _origLoadOrders2 = loadOrders;
 loadOrders = async function (...args) {
   await _origLoadOrders2.apply(this, args);
   await addOrderItemsToOrders();
-};
-/* ========== عرض محتويات كل طلب ========== */
-async function addOrderItemsToOrders() {
-  const rowsEl = $("orderRows");
-  if (!rowsEl) return;
-  const table = rowsEl.closest("table");
-  if (table) {
-    const headRow = table.querySelector("thead tr");
-    if (headRow && !headRow.querySelector("[data-items-head]")) {
-      const th = document.createElement("th");
-      th.textContent = "المحتويات";
-      th.dataset.itemsHead = "1";
-      headRow.appendChild(th);
-    }
-  }
-  const ids = orders.map(o => o.id);
-  let itemsByOrder = {};
-  if (ids.length) {
-    const { data: items } = await sb.from("kh_order_items").select("order_id,product_name,quantity,unit,line_total_iqd").in("order_id", ids);
-    (items || []).forEach(it => {
-      if (!itemsByOrder[it.order_id]) itemsByOrder[it.order_id] = [];
-      itemsByOrder[it.order_id].push(it);
-    });
-  }
-  const trs = rowsEl.querySelectorAll("tr");
-  trs.forEach((tr, i) => {
-    if (tr.querySelector("[data-items-cell]")) return;
-    const order = orders[i];
-    if (!order) return;
-    const its = itemsByOrder[order.id] || [];
-    const itemsHtml = its.length
-      ? `<ul style="margin:0;padding-inline-start:16px">${its.map(it => `<li>${esc(it.product_name)} × ${it.quantity} ${esc(it.unit || "")}</li>`).join("")}</ul>`
-      : "—";
-    const td = document.createElement("td");
-    td.dataset.itemsCell = "1";
-    td.innerHTML = itemsHtml;
-    tr.appendChild(td);
-  });
 }
-
-const _origLoadOrders2 = loadOrders;
-loadOrders = async function (...args) {
-  await _origLoadOrders2.apply(this, args);
-  await addOrderItemsToOrders();
-};
