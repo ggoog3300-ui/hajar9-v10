@@ -2,6 +2,7 @@ const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let
 const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labels={assigned:'بانتظار الاستلام',out_for_delivery:'في الطريق',delivered:'تم التسليم'};
+const waLink=p=>{const d=String(p||'').replace(/\D/g,'');const intl=d.startsWith('964')?d:d.startsWith('0')?'964'+d.slice(1):'964'+d;return `https://wa.me/${intl}`};
 function msg(s){const n=$('notice');n.textContent=s;n.classList.remove('hidden');n.classList.remove('pop');void n.offsetWidth;n.classList.add('pop')}
 async function start(){
   if(!window.supabase||!cfg.SUPABASE_URL||cfg.SUPABASE_URL.includes('YOUR_')||!cfg.SUPABASE_ANON_KEY||cfg.SUPABASE_ANON_KEY.includes('YOUR_')){msg('إعداد Supabase ناقص في config.js.');return}
@@ -21,7 +22,7 @@ async function load(){
   if(error){msg(error.message);return}
   const allowed=['assigned','out_for_delivery','delivered'];
   const rows=(data||[]).filter(o=>allowed.includes(o.status));
-  $('rows').innerHTML=rows.map((o,i)=>`<article class="ocard" style="--i:${i}"><div class="row"><h3>طلب #${esc(o.order_number)}</h3><span class="badge st-${esc(o.status)}">${labels[o.status]||esc(o.status)}</span></div><div class="meta">👤 ${esc(o.customer_name)}<br>📍 ${esc(o.area)} — ${esc(o.address)}</div><div class="acts"><span class="total">${money(o.total_iqd)}</span><a class="btn call" href="tel:${esc(o.customer_phone)}">📞 ${esc(o.customer_phone)}</a><select data-id="${o.id}"><option value="assigned" ${o.status==='assigned'?'selected':''}>استلام المهمة</option><option value="out_for_delivery" ${o.status==='out_for_delivery'?'selected':''}>في الطريق</option><option value="delivered" ${o.status==='delivered'?'selected':''}>تم التسليم</option></select></div></article>`).join('')||'<div class="panel" style="text-align:center">🛵 لا توجد طلبات مسندة حالياً.</div>';
+  $('rows').innerHTML=rows.map((o,i)=>`<article class="ocard" style="--i:${i}"><div class="row"><h3>طلب #${esc(o.order_number)}</h3><span class="badge st-${esc(o.status)}">${labels[o.status]||esc(o.status)}</span></div><div class="meta">👤 ${esc(o.customer_name)}<br>📍 ${esc(o.area)} — ${esc(o.address)}</div><div class="acts"><span class="total">${money(o.total_iqd)}</span><a class="btn call" href="tel:${esc(o.customer_phone)}">📞 ${esc(o.customer_phone)}</a><a class="btn wa" href="${waLink(o.customer_phone)}" target="_blank" rel="noopener">💬 واتساب</a><select data-id="${o.id}"><option value="assigned" ${o.status==='assigned'?'selected':''}>استلام المهمة</option><option value="out_for_delivery" ${o.status==='out_for_delivery'?'selected':''}>في الطريق</option><option value="delivered" ${o.status==='delivered'?'selected':''}>تم التسليم</option></select></div></article>`).join('')||'<div class="panel" style="text-align:center">🛵 لا توجد طلبات مسندة حالياً.</div>';
   document.querySelectorAll('[data-id]').forEach(s=>s.onchange=async()=>{
     const {error}=await sb.from('kh_orders').update({status:s.value,updated_at:new Date().toISOString()}).eq('id',s.dataset.id);
     if(error)msg('تعذر تحديث الحالة.');else{msg('تم تحديث حالة الطلب.');if(s.value==='delivered'&&window.FX)FX.confetti(24);load()}
