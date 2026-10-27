@@ -19,14 +19,21 @@ function renderCustomers(){const q=($('custSearch').value||'').trim().toLowerCas
 $('custSearch').oninput=renderCustomers;
 start();
 /* ========== إدارة المندوبين وتعيينهم للطلبات ========== */
-const toast = (typeof say === "function") ? say : (s) => alert(s);
+const toast = (typeof msg === "function") ? msg : (s) => alert(s);
 let couriers = [];
 
 async function loadCouriers() {
   const { data, error } = await sb.from("kh_profiles").select("id,full_name,phone,active").eq("role", "courier").order("full_name");
   if (error) { console.error(error); couriers = []; return; }
-  couriers = data || [
-   function addCourierColumnToOrders() {
+  couriers = data || [];
+}
+
+function courierOptionsHtml(selectedId) {
+  return '<option value="">— بدون مندوب —</option>' +
+    couriers.map(c => `<option value="${esc(c.id)}" ${String(c.id) === String(selectedId) ? "selected" : ""}>${esc(c.full_name || c.phone || "مندوب")}</option>`).join("");
+}
+
+function addCourierColumnToOrders() {
   const rowsEl = $("orderRows");
   if (!rowsEl) return;
   const table = rowsEl.closest("table");
@@ -56,10 +63,113 @@ async function loadCouriers() {
         toast("تم تعيين المندوب");
       } catch (err) {
         console.error(err);
-        toast("تعذر تعيين المندوب. تحقق من إعداد Edge Function.", "err");
+        toast("تعذر تعيين المندوب. تحقق من إعداد Edge Function.");
       } finally {
         sel.disabled = false;
       }
     };
   });
-} 
+}
+
+const _origLoadOrders = loadOrders;
+loadOrders = async function (...args) {
+  await _origLoadOrders.apply(this, args);
+  await loadCouriers();
+  const ids = orders.map(o => o.id);
+  if (ids.length) {
+    const { data: courierData } = await sb.from("kh_orders").select("id,courier_id").in("id", ids);
+    (courierData || []).forEach(cd => {
+      const o = orders.find(x => x.id === cd.id);
+      if (o) o.courier_id = cd.courier_id;
+    });
+  }
+  addCourierColumnToOrders();
+};
+
+function renderCouriersTable() {
+  const rows = $("couriersRows");
+  if (!rows) return;
+  rows.innerHTML = couriers.length ? couriers.map(c => `
+    <tr>
+      <td>${esc(c.full_name || "—")}</td>
+      <td>${esc(c.phone || "—")}</td>
+      <td>${c.active ? "نشط" : "موقوف"}</td>
+      <td><button class="btn" data-courier-toggle="${esc(c.id)}">${c.active ? "إيقاف" : "تفعيل"}</button></td>
+    </tr>`).join("") : '<tr><td colspan="4">لا يوجد مندوبين بعد</td></tr>';
+  rows.querySelectorAll("[data-courier-toggle]").forEach(b => {
+    b.onclick = async () => {
+      const id = b.dataset.courierToggle;
+      const c = couriers.find(x => x.id === id);
+      if (!c) return;
+      const { error } = await sb.from("kh_profiles").update({ active: !c.active }).eq("id", id);
+      if (error) { toast("تعذر التحديث"); return; }
+      await loadCouriers();
+      renderCouriersTable();
+    };
+  });
+}
+
+function injectCourierTab() {
+  const anyTabBtn = document.querySelector("[data-tab]");
+  if (!anyTabBtn || document.querySelector('[data-tab="couriersTab"]')) return;
+  const tabsWrap = anyTabBtn.parentElement;
+  const btn = document.createElement("button");
+  btn.className = anyTabBtn.className;
+  btn.dataset.tab = "couriersTab";
+  btn.textContent = "المندوبين";
+  tabsWrap.appendChild(btn);
+
+  const mainEl = document.querySelector("main");
+  const section = document.createElement("section");
+  section.id = "couriersTab";
+  section.className = "hidden";
+  section.innerHTML = `
+    <h2>إضافة مندوب جديد</h2>
+    <form id="courierForm">
+      <div class="field"><label>الاسم الكامل</label><input name="full_name" required></div>
+      <div class="field"><label>رقم الهاتف</label><input name="phone" required></div>
+      <div class="field"><label>البريد الإلكتروني</label><input name="email" type="email" required></div>
+      <div class="field"><label>كلمة المرور</label><input name="password" type="password" required minlength="6"></div>
+      <button class="btn" type="submit">إضافة مندوب</button>
+    </form>
+    <h2>قائمة المندوبين</h2>
+    <table><thead><tr><th>الاسم</th><th>الهاتف</th><th>الحالة</th><th>إجراء</th></tr></thead>
+      <tbody id="couriersRows"></tbody></table>`;
+  mainEl.appendChild(section);
+
+  btn.onclick = async () => {
+    document.querySelectorAll("main section").forEach(s => s.classList.add("hidden"));
+    section.classList.remove("hidden");
+    document.querySelectorAll("[data-tab]").forEach(x => x.classList.toggle("active", x === btn));
+    await loadCouriers();
+    renderCouriersTable();
+  };
+
+  $("courierForm").onsubmit = async (e) => {
+    e.preventDefault();
+    const f = new FormData(e.currentTarget);
+    const body = {
+      full_name: f.get("full_name").trim(),
+      phone: f.get("phone").trim(),
+      email: f.get("email").trim(),
+      password: f.get("password")
+    };
+    const submitBtn = e.currentTarget.querySelector("button");
+    submitBtn.disabled = true; submitBtn.textContent = "جارٍ الإضافة...";
+    try {
+      const { error } = await sb.functions.invoke("admin-create-courier", { body });
+      if (error) throw error;
+      toast("تمت إضافة المندوب بنجاح");
+      e.currentTarget.reset();
+      await loadCouriers();
+      renderCouriersTable();
+    } catch (err) {
+      console.error(err);
+      toast("تعذر إضافة المندوب. تحقق من إعداد Edge Function.");
+    } finally {
+      submitBtn.disabled = false; submitBtn.textContent = "إضافة مندوب";
+    }
+  };
+}
+
+injectCourierTab();
