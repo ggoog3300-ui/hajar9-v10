@@ -2,7 +2,7 @@ const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let
 const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const labels={assigned:'بانتظار الاستلام',out_for_delivery:'في الطريق',delivered:'تم التسليم'};
-const waLink=p=>{const d=String(p||'').replace(/\D/g,'');const intl=d.startsWith('964')?d:d.startsWith('0')?'964'+d.slice(1):'964'+d;return `https://wa.me/${intl}`};
+const waLink=p=>{const d=String(p||'').replace(/\D/g,'');const intl=d.startsWith('964')?d:d.startsWith('0')?'964'+d.slice(1):'964'+d;const t=encodeURIComponent('مرحباً، أنا مندوب خضارنا 🛵 يرجى دعمي بالموقع لإيصال طلبكم.');return `https://wa.me/${intl}?text=${t}`};
 function msg(s){const n=$('notice');n.textContent=s;n.classList.remove('hidden');n.classList.remove('pop');void n.offsetWidth;n.classList.add('pop')}
 async function start(){
   if(!window.supabase||!cfg.SUPABASE_URL||cfg.SUPABASE_URL.includes('YOUR_')||!cfg.SUPABASE_ANON_KEY||cfg.SUPABASE_ANON_KEY.includes('YOUR_')){msg('إعداد Supabase ناقص في config.js.');return}
