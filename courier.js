@@ -63,3 +63,9 @@ async function markOrderDelivered(orderId) {
     await loadOrders();
   }
 }
+${order.status !== "delivered"
+  ? `<button onclick="markOrderDelivered('${order.id}')">
+       تم التوصيل
+     </button>`
+  : `<span class="delivered-status">تم التوصيل ✓</span>`
+}
