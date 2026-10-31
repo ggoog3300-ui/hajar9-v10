@@ -29,3 +29,37 @@ async function load(){
   });
 }
 start();
+async function markOrderDelivered(orderId) {
+  const confirmed = confirm(
+    "هل أنت متأكد من إتمام توصيل الطلب؟ لا يمكن التراجع عن هذه العملية."
+  );
+
+  if (!confirmed) return;
+
+  const { data, error } = await supabase
+    .from("kh_orders")
+    .update({
+      status: "delivered",
+      delivered_at: new Date().toISOString()
+    })
+    .eq("id", orderId)
+    .neq("status", "delivered")
+    .select("id");
+
+  if (error) {
+    alert("فشل تحديث حالة الطلب: " + error.message);
+    return;
+  }
+
+  if (!data || data.length === 0) {
+    alert("الطلب تم توصيله مسبقًا أو لا تملك صلاحية تعديله.");
+    return;
+  }
+
+  alert("تم تأكيد توصيل الطلب بنجاح.");
+
+  // إعادة تحميل الطلبات
+  if (typeof loadOrders === "function") {
+    await loadOrders();
+  }
+}
