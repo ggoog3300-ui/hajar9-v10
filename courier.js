@@ -1,69 +1,316 @@
-const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let sb;
-const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const labels={assigned:'بانتظار الاستلام',out_for_delivery:'في الطريق',delivered:'تم التسليم'};
-const waLink=p=>{const d=String(p||'').replace(/\D/g,'');const intl=d.startsWith('964')?d:d.startsWith('0')?'964'+d.slice(1):'964'+d;const t=encodeURIComponent('مرحباً، أنا مندوب خضارنا 🛵 يرجى دعمي بالموقع لإيصال طلبكم.');return `https://wa.me/${intl}?text=${t}`};
-function msg(s){const n=$('notice');n.textContent=s;n.classList.remove('hidden');n.classList.remove('pop');void n.offsetWidth;n.classList.add('pop')}
-async function start(){
-  if(!window.supabase||!cfg.SUPABASE_URL||cfg.SUPABASE_URL.includes('YOUR_')||!cfg.SUPABASE_ANON_KEY||cfg.SUPABASE_ANON_KEY.includes('YOUR_')){msg('إعداد Supabase ناقص في config.js.');return}
-  sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);
-  const {data:{session}}=await sb.auth.getSession();if(session)await enter();
+
+const cfg = window.KHUDARNA_CONFIG || {};
+const $ = (id) => document.getElementById(id);
+
+let sb;
+let currentUser = null;
+let loading = false;
+
+const SUPABASE_URL = "https://evcjgbwlmvfbgqsgqyvf.supabase.co";
+const SUPABASE_ANON_KEY =
+  "sb_publishable_Z4C6jDppXEW1ZDBB489MVg_0k1MMdSX";
+
+const labels = {
+  assigned: "بانتظار الاستلام",
+  out_for_delivery: "في الطريق",
+  delivered: "تم التسليم",
+};
+
+const money = (n) =>
+  new Intl.NumberFormat("en-US").format(Number(n) || 0) + " د.ع";
+
+const esc = (s) =>
+  String(s ?? "").replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  })[c]);
+
+function msg(message) {
+  const notice = $("notice");
+  if (!notice) {
+    alert(message);
+    return;
+  }
+
+  notice.textContent = message;
+  notice.classList.remove("hidden", "pop");
+  void notice.offsetWidth;
+  notice.classList.add("pop");
 }
-$('loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const {error}=await sb.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error)msg('فشل تسجيل الدخول: '+error.message);else await enter()};
-async function enter(){
-  const {data:{user}}=await sb.auth.getUser();
-  const {data:p,error}=await sb.from('kh_profiles').select('role,active').eq('id',user.id).single();
-  if(error||!p||p.role!=='courier'||!p.active){await sb.auth.signOut();msg('هذا الحساب ليس لديه صلاحية مندوب نشطة.');return}
-  $('loginPanel').classList.add('hidden');$('app').classList.remove('hidden');await load();
-}
-$('logout').onclick=()=>sb.auth.signOut();
-async function load(){
-  const {data,error}=await sb.from('kh_orders').select('id,order_number,customer_name,customer_phone,area,address,total_iqd,status').order('created_at',{ascending:false});
-  if(error){msg(error.message);return}
-  const allowed=['assigned','out_for_delivery','delivered'];
-  const rows=(data||[]).filter(o=>allowed.includes(o.status));
-  $('rows').innerHTML=rows.map((o,i)=>`<article class="ocard" style="--i:${i}"><div class="row"><h3>طلب #${esc(o.order_number)}</h3><span class="badge st-${esc(o.status)}">${labels[o.status]||esc(o.status)}</span></div><div class="meta">👤 ${esc(o.customer_name)}<br>📍 ${esc(o.area)} — ${esc(o.address)}</div><div class="acts"><span class="total">${money(o.total_iqd)}</span><a class="btn call" href="tel:${esc(o.customer_phone)}">📞 ${esc(o.customer_phone)}</a><a class="btn wa" href="${waLink(o.customer_phone)}" target="_blank" rel="noopener">💬 واتساب</a><select data-id="${o.id}"><option value="assigned" ${o.status==='assigned'?'selected':''}>استلام المهمة</option><option value="out_for_delivery" ${o.status==='out_for_delivery'?'selected':''}>في الطريق</option><option value="delivered" ${o.status==='delivered'?'selected':''}>تم التسليم</option></select></div></article>`).join('')||'<div class="panel" style="text-align:center">🛵 لا توجد طلبات مسندة حالياً.</div>';
-  document.querySelectorAll('[data-id]').forEach(s=>s.onchange=async()=>{
-    const {error}=await sb.from('kh_orders').update({status:s.value,updated_at:new Date().toISOString()}).eq('id',s.dataset.id);
-    if(error)msg('تعذر تحديث الحالة.');else{msg('تم تحديث حالة الطلب.');if(s.value==='delivered'&&window.FX)FX.confetti(24);load()}
-  });
-}
-start();
-async function markOrderDelivered(orderId) {
-  const confirmed = confirm(
-    "هل أنت متأكد من إتمام توصيل الطلب؟ لا يمكن التراجع عن هذه العملية."
+
+function waLink(phone) {
+  let number = String(phone || "").replace(/\D/g, "");
+
+  if (number.startsWith("0")) {
+    number = "964" + number.slice(1);
+  } else if (!number.startsWith("964")) {
+    number = "964" + number;
+  }
+
+  const text = encodeURIComponent(
+    "مرحباً، أنا مندوب خضارنا 🛵 يرجى دعمي بالموقع لإيصال طلبكم."
   );
 
-  if (!confirmed) return;
+  return `https://wa.me/${number}?text=${text}`;
+}
 
-  const { data, error } = await supabase
-    .from("kh_orders")
-    .update({
-      status: "delivered",
-      delivered_at: new Date().toISOString()
-    })
-    .eq("id", orderId)
-    .neq("status", "delivered")
-    .select("id");
+async function initSupabase() {
+  if (!window.supabase?.createClient) {
+    msg("تعذر تحميل مكتبة Supabase. تحقق من اتصال الإنترنت.");
+    return false;
+  }
 
-  if (error) {
-    alert("فشل تحديث حالة الطلب: " + error.message);
+  sb = window.supabase.createClient(
+    cfg.SUPABASE_URL || SUPABASE_URL,
+    cfg.SUPABASE_ANON_KEY || SUPABASE_ANON_KEY
+  );
+
+  return true;
+}
+
+async function start() {
+  if (!(await initSupabase())) return;
+
+  try {
+    const { data, error } = await sb.auth.getSession();
+
+    if (error) throw error;
+
+    if (data.session) {
+      await enter();
+    }
+  } catch (error) {
+    msg("تعذر التحقق من جلسة الدخول.");
+    console.error(error);
+  }
+}
+
+$("loginForm").onsubmit = async (event) => {
+  event.preventDefault();
+
+  if (!sb) {
+    msg("الاتصال بقاعدة البيانات غير جاهز.");
     return;
   }
 
-  if (!data || data.length === 0) {
-    alert("الطلب تم توصيله مسبقًا أو لا تملك صلاحية تعديله.");
+  const form = new FormData(event.currentTarget);
+  const email = String(form.get("email") || "").trim();
+  const password = String(form.get("password") || "");
+
+  if (!email || !password) {
+    msg("يرجى إدخال البريد الإلكتروني وكلمة المرور.");
     return;
   }
 
-  alert("تم تأكيد توصيل الطلب بنجاح.");
+  try {
+    const { error } = await sb.auth.signInWithPassword({
+      email,
+      password,
+    });
 
-  // إعادة تحميل الطلبات
-  if (typeof loadOrders === "function") {
-    await loadOrders();
+    if (error) throw error;
+
+    await enter();
+  } catch (error) {
+    msg("فشل تسجيل الدخول: " + (error.message || "خطأ غير معروف"));
+  }
+};
+
+async function enter() {
+  try {
+    const { data, error } = await sb.auth.getUser();
+
+    if (error || !data.user) {
+      throw error || new Error("لم يتم العثور على المستخدم.");
+    }
+
+    currentUser = data.user;
+
+    const { data: profile, error: profileError } = await sb
+      .from("kh_profiles")
+      .select("role, active")
+      .eq("id", currentUser.id)
+      .single();
+
+    if (
+      profileError ||
+      !profile ||
+      profile.role !== "courier" ||
+      profile.active !== true
+    ) {
+      await sb.auth.signOut();
+      currentUser = null;
+      msg("هذا الحساب ليس لديه صلاحية مندوب نشطة.");
+      return;
+    }
+
+    $("loginPanel").classList.add("hidden");
+    $("app").classList.remove("hidden");
+
+    await load();
+  } catch (error) {
+    console.error(error);
+    msg("تعذر التحقق من صلاحيات المندوب.");
   }
 }
-       تم التوصيل
-     </button>`
-  : `<span class="delivered-status">تم التوصيل ✓</span>`
+
+$("logout").onclick = async () => {
+  try {
+    await sb.auth.signOut();
+    currentUser = null;
+    $("app").classList.add("hidden");
+    $("loginPanel").classList.remove("hidden");
+  } catch (error) {
+    msg("تعذر تسجيل الخروج.");
+  }
+};
+
+async function load() {
+  if (!sb || !currentUser || loading) return;
+
+  loading = true;
+
+  try {
+    const { data, error } = await sb
+      .from("kh_orders")
+      .select(
+        "id, order_number, customer_name, customer_phone, area, address, total_iqd, status"
+      )
+      .in("status", ["assigned", "out_for_delivery", "delivered"])
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    renderOrders(data || []);
+  } catch (error) {
+    console.error(error);
+    msg("تعذر تحميل الطلبات: " + (error.message || ""));
+  } finally {
+    loading = false;
+  }
 }
+
+function renderOrders(orders) {
+  const rows = $("rows");
+  if (!rows) return;
+
+  rows.innerHTML = orders.map((order, index) => {
+    const delivered = order.status === "delivered";
+
+    return `
+      <article class="ocard" style="--i:${index}">
+        <div class="row">
+          <h3>طلب #${esc(order.order_number)}</h3>
+          <span class="badge st-${esc(order.status)}">
+            ${esc(labels[order.status] || order.status)}
+          </span>
+        </div>
+
+        <div class="meta">
+          👤 ${esc(order.customer_name)}<br>
+          📍 ${esc(order.area)} — ${esc(order.address)}
+        </div>
+
+        <div class="acts">
+          <span class="total">${money(order.total_iqd)}</span>
+
+          <a class="btn call" href="tel:${esc(order.customer_phone)}">
+            📞 ${esc(order.customer_phone)}
+          </a>
+
+          <a class="btn wa"
+             href="${waLink(order.customer_phone)}"
+             target="_blank"
+             rel="noopener noreferrer">
+            💬 واتساب
+          </a>
+
+          ${
+            delivered
+              ? '<span class="delivered-status">تم التوصيل ✓</span>'
+              : `
+                <select data-id="${esc(order.id)}"
+                        data-current="${esc(order.status)}">
+                  <option value="assigned"
+                    ${order.status === "assigned" ? "selected" : ""}>
+                    استلام المهمة
+                  </option>
+                  <option value="out_for_delivery"
+                    ${order.status === "out_for_delivery" ? "selected" : ""}>
+                    في الطريق
+                  </option>
+                  <option value="delivered">
+                    تم التسليم
+                  </option>
+                </select>
+              `
+          }
+        </div>
+      </article>
+    `;
+  }).join("") ||
+    '<div class="panel" style="text-align:center">🛵 لا توجد طلبات مسندة حالياً.</div>';
+
+  rows.querySelectorAll("select[data-id]").forEach((select) => {
+    select.onchange = async () => {
+      const orderId = select.dataset.id;
+      const previousStatus = select.dataset.current;
+      const newStatus = select.value;
+
+      if (newStatus === "delivered") {
+        const confirmed = confirm(
+          "هل أنت متأكد من إتمام توصيل الطلب؟ لا يمكن التراجع عن هذه العملية."
+        );
+
+        if (!confirmed) {
+          select.value = previousStatus;
+          return;
+        }
+      }
+
+      select.disabled = true;
+
+      try {
+        const { data, error } = await sb
+          .from("kh_orders")
+          .update({
+            status: newStatus,
+            updated_at: new Date().toISOString(),
+            ...(newStatus === "delivered"
+              ? { delivered_at: new Date().toISOString() }
+              : {}),
+          })
+          .eq("id", orderId)
+          .eq("status", previousStatus)
+          .select("id");
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+          msg("لم يتم تحديث الطلب. ربما تم تعديله مسبقاً.");
+          await load();
+          return;
+        }
+
+        msg("تم تحديث حالة الطلب.");
+
+        if (newStatus === "delivered" && window.FX) {
+          window.FX.confetti(24);
+        }
+
+        await load();
+      } catch (error) {
+        console.error(error);
+        msg("تعذر تحديث حالة الطلب: " + (error.message || ""));
+        select.value = previousStatus;
+      } finally {
+        select.disabled = false;
+      }
+    };
+  });
+}
+
+start();
