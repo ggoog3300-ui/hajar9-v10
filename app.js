@@ -63,7 +63,7 @@ async function init(){
 }
 async function loadCatalog(){
   const {data:cs,error:ce}=await sb.from('kh_categories').select('id,name,emoji').eq('active',true).order('sort_order');if(ce)throw ce;
-  const {data,error}=await sb.from('kh_products').select('id,name,description,emoji,unit,price_iqd,category_id,image_url').eq('is_available',true).order('name');if(error)throw error;
+  const {data,error}=await sb.from('kh_products').select('id,name,description,emoji,image_url,unit,price_iqd,category_id').eq('is_available',true).order('name');if(error)throw error;
   products=(data||[]).map(p=>({...p,cat:(cs||[]).find(c=>c.id===p.category_id)?.name||'أخرى'}));
   if(cs&&cs.length)cats=[['الكل','🧺'],...cs.map(c=>[c.name,c.emoji||'🥬'])];
   live=true;
@@ -94,9 +94,11 @@ function ctl(p){
   return q?`<div class="stepper"><button data-dec="${esc(p.id)}" aria-label="إنقاص">−</button><b>${q}</b><button data-inc="${esc(p.id)}" aria-label="زيادة">＋</button></div>`
           :`<button class="btn" data-add="${esc(p.id)}">＋ أضف للسلة</button>`;
 }
+function picHtml(p){
+  return p.image_url?`<img class="pimg" src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`:`<span class="emo">${esc(p.emoji||'🥬')}</span>`;
+}
 function card(p,i){
-  const pic=p.image_url?`<img class="prod-img" src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`:`<span class="emo">${esc(p.emoji||'🥬')}</span>`;
-  return `<article class="product reveal" style="--i:${i%8};--h:${hue(p.name)}" data-id="${esc(p.id)}"><div class="pic">${pic}<span class="tag">طازج</span></div><div class="pb"><h3>${esc(p.name)}</h3><p>${esc(p.description||'منتج طازج')}</p><div class="price">${money(p.price_iqd)} <small>/ ${esc(p.unit)}</small></div><div class="ctl">${ctl(p)}</div></div></article>`;
+  return `<article class="product reveal" style="--i:${i%8};--h:${hue(p.name)}" data-id="${esc(p.id)}"><div class="pic">${picHtml(p)}<span class="tag">طازج</span></div><div class="pb"><h3>${esc(p.name)}</h3><p>${esc(p.description||'منتج طازج')}</p><div class="price">${money(p.price_iqd)} <small>/ ${esc(p.unit)}</small></div><div class="ctl">${ctl(p)}</div></div></article>`;
 }
 function renderProducts(){
   const a=list();
@@ -129,7 +131,7 @@ function cartLines(){return Object.entries(cart).map(([id,q])=>({p:prod(id),q}))
 function subtotal(){return cartLines().reduce((s,x)=>s+x.p.price_iqd*x.q,0)}
 function itemHtml({p,q}){
   const id=esc(p.id);
-  return `<div class="item"><div class="emoji">${esc(p.emoji||'🥬')}</div><div class="imeta"><h4>${esc(p.name)}</h4><small>${money(p.price_iqd)} / ${esc(p.unit)}</small><br><div class="stepper sm"><button data-dec="${id}" aria-label="إنقاص">−</button><b>${q}</b><button data-inc="${id}" aria-label="زيادة">＋</button></div></div><div class="iend"><strong>${money(p.price_iqd*q)}</strong><button class="del" data-del="${id}" aria-label="حذف">🗑</button></div></div>`;
+  return `<div class="item"><div class="emoji">${p.image_url?`<img src="${esc(p.image_url)}" alt="">`:esc(p.emoji||'🥬')}</div><div class="imeta"><h4>${esc(p.name)}</h4><small>${money(p.price_iqd)} / ${esc(p.unit)}</small><br><div class="stepper sm"><button data-dec="${id}" aria-label="إنقاص">−</button><b>${q}</b><button data-inc="${id}" aria-label="زيادة">＋</button></div></div><div class="iend"><strong>${money(p.price_iqd*q)}</strong><button class="del" data-del="${id}" aria-label="حذف">🗑</button></div></div>`;
 }
 function renderCart(){
   const lines=cartLines(),n=lines.reduce((s,x)=>s+x.q,0),cnt=$('count');
