@@ -278,7 +278,6 @@ function injectCourierTab() {
       renderCouriersTable();
     } catch (err) {
       console.error(err);
-      toast("تعذر إضافة المندوب. تحقق من إعداد Edge Function.");
     } finally {
       submitBtn.disabled = false; submitBtn.textContent = "إضافة مندوب";
     }
