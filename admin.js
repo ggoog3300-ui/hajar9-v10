@@ -1,4 +1,4 @@
-const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let sb=null,categories=[],orders=[];const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function configured(){return window.supabase&&cfg.SUPABASE_URL&&!cfg.SUPABASE_URL.includes('YOUR_')&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_ANON_KEY.includes('YOUR_')}
+const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let sb=null,categories=[],orders=[],productsCache=[],editingProductId=null;const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function configured(){return window.supabase&&cfg.SUPABASE_URL&&!cfg.SUPABASE_URL.includes('YOUR_')&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_ANON_KEY.includes('YOUR_')}
 function msg(s){const n=$('notice');n.textContent=s;n.classList.remove('hidden');n.classList.remove('pop');void n.offsetWidth;n.classList.add('pop')}
 async function start(){if(!configured()){msg('إعداد Supabase ناقص. عدّل config.js ثم أعد تحميل الصفحة.');return}sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);const {data:{session}}=await sb.auth.getSession();if(session)await enter();sb.auth.onAuthStateChange((_e,session)=>{if(!session){$('app').classList.add('hidden');$('loginPanel').classList.remove('hidden')}})}
 $('loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const {error}=await sb.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error)msg('فشل تسجيل الدخول: '+error.message);else await enter()};
@@ -19,16 +19,62 @@ async function deleteProductImage(url){
   if(!path)return;
   try{await sb.storage.from(PRODUCT_IMAGE_BUCKET).remove([path])}catch(e){console.error('تعذر حذف صورة المنتج من التخزين',e)}
 }
-async function loadProducts(){const {data,error}=await sb.from('kh_products').select('id,name,category_id,price_iqd,unit,stock_quantity,is_available,emoji,image_url,kh_categories(name)').order('created_at',{ascending:false});if(error){msg(error.message);return}const a=data||[];FX.count($('statProducts'),a.length);$('productRows').innerHTML=a.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:esc(p.emoji||'🥬')}</td><td>${esc(p.name)}</td><td>${esc(p.kh_categories?.name||'—')}</td><td>${money(p.price_iqd)}</td><td>${p.stock_quantity}</td><td><span class="badge ${p.is_available?'b-yes':'b-no'}">${p.is_available?'نعم':'لا'}</span></td><td><button class="btn" data-toggle="${p.id}" data-on="${p.is_available}">${p.is_available?'إخفاء':'إظهار'}</button> <button class="btn danger" data-delete="${p.id}" data-image="${esc(p.image_url||'')}">حذف</button></td></tr>`).join('');document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const {error}=await sb.from('kh_products').update({is_available:b.dataset.on!=='true',updated_at:new Date().toISOString()}).eq('id',b.dataset.toggle);if(error)msg(error.message);else loadProducts()});document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
+async function loadProducts(){const {data,error}=await sb.from('kh_products').select('id,name,category_id,price_iqd,unit,stock_quantity,is_available,emoji,image_url,description,kh_categories(name)').order('created_at',{ascending:false});if(error){msg(error.message);return}const a=data||[];productsCache=a;FX.count($('statProducts'),a.length);$('productRows').innerHTML=a.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:esc(p.emoji||'🥬')}</td><td>${esc(p.name)}</td><td>${esc(p.kh_categories?.name||'—')}</td><td>${money(p.price_iqd)}</td><td>${p.stock_quantity}</td><td><span class="badge ${p.is_available?'b-yes':'b-no'}">${p.is_available?'نعم':'لا'}</span></td><td><button class="btn" data-toggle="${p.id}" data-on="${p.is_available}">${p.is_available?'إخفاء':'إظهار'}</button> <button class="btn" data-edit="${p.id}">تعديل</button> <button class="btn danger" data-delete="${p.id}" data-image="${esc(p.image_url||'')}">حذف</button></td></tr>`).join('');document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const {error}=await sb.from('kh_products').update({is_available:b.dataset.on!=='true',updated_at:new Date().toISOString()}).eq('id',b.dataset.toggle);if(error)msg(error.message);else loadProducts()});document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>{const p=productsCache.find(x=>String(x.id)===String(b.dataset.edit));if(p)startEditProduct(p)});document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
   if(!confirm('حذف المنتج؟'))return;
   b.disabled=true;
   const imageUrl=b.dataset.image;
-  const {error}=await sb.from('kh_products').delete().eq('id',b.dataset.delete);
+  const deletedId=b.dataset.delete;
+  const {error}=await sb.from('kh_products').delete().eq('id',deletedId);
   if(error){msg(error.message);b.disabled=false;return}
   if(imageUrl)await deleteProductImage(imageUrl);
+  if(String(editingProductId)===String(deletedId))exitEditMode();
   msg('تم حذف المنتج وصورته.');
   loadProducts();
 })}
+/* ---------- تعديل منتج ---------- */
+function ensureCancelEditBtn(){
+  let btn=$('cancelEditBtn');
+  if(btn)return btn;
+  const form=$('productForm');
+  btn=document.createElement('button');
+  btn.type='button';btn.id='cancelEditBtn';btn.className='btn danger';
+  btn.style.width='100%';btn.style.marginTop='8px';
+  btn.textContent='إلغاء التعديل';btn.hidden=true;
+  btn.onclick=()=>exitEditMode();
+  form.appendChild(btn);
+  return btn;
+}
+function startEditProduct(p){
+  editingProductId=p.id;
+  const form=$('productForm');
+  form.name.value=p.name||'';
+  if(form.category_id)form.category_id.value=p.category_id;
+  form.price_iqd.value=p.price_iqd;
+  form.unit.value=p.unit;
+  form.emoji.value=p.emoji||'🥬';
+  form.stock_quantity.value=p.stock_quantity;
+  form.description.value=p.description||'';
+  if($('productImage'))$('productImage').value='';
+  const prev=$('productImagePreview');
+  if(prev){if(p.image_url){prev.src=p.image_url;prev.classList.add('show')}else{prev.src='';prev.classList.remove('show')}}
+  if($('pickImageBtn'))$('pickImageBtn').textContent='📷 إضافة صورة';
+  const submitBtn=form.querySelector('button[type="submit"],button:not([type]):not(#cancelEditBtn)');
+  if(submitBtn)submitBtn.textContent='تحديث المنتج';
+  ensureCancelEditBtn().hidden=false;
+  form.scrollIntoView({behavior:'smooth'});
+}
+function exitEditMode(){
+  editingProductId=null;
+  const form=$('productForm');
+  form.reset();
+  const prev=$('productImagePreview');
+  if(prev){prev.classList.remove('show');prev.src=''}
+  if($('pickImageBtn'))$('pickImageBtn').textContent='📷 إضافة صورة';
+  const submitBtn=form.querySelector('button[type="submit"],button:not([type]):not(#cancelEditBtn)');
+  if(submitBtn)submitBtn.textContent='حفظ المنتج';
+  const cancelBtn=$('cancelEditBtn');
+  if(cancelBtn)cancelBtn.hidden=true;
+}
 if($('pickImageBtn'))$('pickImageBtn').onclick=()=>$('productImage').click();
 if($('productImage'))$('productImage').onchange=e=>{
   const file=e.target.files&&e.target.files[0],prev=$('productImagePreview'),btn=$('pickImageBtn');
@@ -47,20 +93,31 @@ async function uploadProductImage(file){
 $('productForm').onsubmit=async e=>{
   e.preventDefault();
   const form=e.currentTarget,f=new FormData(form);
-  const submitBtn=form.querySelector('button');
+  const submitBtn=form.querySelector('button[type="submit"],button:not([type]):not(#cancelEditBtn)');
   const file=$('productImage')&&$('productImage').files&&$('productImage').files[0];
-  const item={name:f.get('name').trim(),category_id:Number(f.get('category_id')),price_iqd:Number(f.get('price_iqd')),unit:f.get('unit'),emoji:f.get('emoji')||'🥬',stock_quantity:Number(f.get('stock_quantity')||0),description:f.get('description')||'',is_available:true};
+  const isEdit=!!editingProductId;
+  const item={name:f.get('name').trim(),category_id:Number(f.get('category_id')),price_iqd:Number(f.get('price_iqd')),unit:f.get('unit'),emoji:f.get('emoji')||'🥬',stock_quantity:Number(f.get('stock_quantity')||0),description:f.get('description')||''};
+  if(!isEdit)item.is_available=true;
   submitBtn.disabled=true;const origText=submitBtn.textContent;
   try{
+    const prevImageUrl=isEdit?(productsCache.find(x=>String(x.id)===String(editingProductId))||{}).image_url:null;
     if(file){submitBtn.textContent='جارٍ رفع الصورة...';item.image_url=await uploadProductImage(file)}
-    const {error}=await sb.from('kh_products').insert(item);
-    if(error)throw error;
-    msg('تم حفظ المنتج.');form.reset();$('productImagePreview').classList.remove('show');$('productImagePreview').src='';
+    if(isEdit){
+      const {error}=await sb.from('kh_products').update(item).eq('id',editingProductId);
+      if(error)throw error;
+      if(file&&prevImageUrl)await deleteProductImage(prevImageUrl);
+      msg('تم تحديث المنتج.');
+    }else{
+      const {error}=await sb.from('kh_products').insert(item);
+      if(error)throw error;
+      msg('تم حفظ المنتج.');
+    }
+    exitEditMode();
     await loadProducts();
   }catch(err){
     msg('تعذر حفظ المنتج: '+(err.message||err));
   }finally{
-    submitBtn.disabled=false;submitBtn.textContent=origText;
+    submitBtn.disabled=false;if(submitBtn.textContent==='جارٍ رفع الصورة...')submitBtn.textContent=origText;
   }
 };
 async function loadOrders(){const {data,error}=await sb.from('kh_orders').select('id,order_number,customer_name,customer_phone,area,total_iqd,status,created_at').order('created_at',{ascending:false}).limit(200);if(error){msg(error.message);return}orders=data||[];FX.count($('statOrders'),orders.filter(o=>o.status==='new').length);FX.count($('statAll'),orders.length);const labels={new:'جديد',confirmed:'مؤكد',preparing:'قيد التجهيز',assigned:'تم تعيين مندوب',out_for_delivery:'في الطريق',delivered:'تم التسليم',cancelled:'ملغي'};$('orderRows').innerHTML=orders.map(o=>`<tr><td>${o.order_number}</td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}</td><td>${esc(o.area)}</td><td>${money(o.total_iqd)}</td><td><span class="badge st-${esc(o.status)}">${labels[o.status]||esc(o.status)}</span></td><td><select data-status="${o.id}">${Object.entries(labels).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v}</option>`).join('')}</select></td></tr>`).join('');document.querySelectorAll('[data-status]').forEach(s=>s.onchange=async()=>{const {error}=await sb.functions.invoke('admin-update-order',{body:{order_id:s.dataset.status,status:s.value}});if(error){msg('تعذر تحديث الحالة. تأكد من نشر Edge Function.');await loadOrders()}else{msg('تم تحديث حالة الطلب.');await loadOrders()}})}
