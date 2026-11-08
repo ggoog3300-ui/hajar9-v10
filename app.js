@@ -63,7 +63,7 @@ async function init(){
 }
 async function loadCatalog(){
   const {data:cs,error:ce}=await sb.from('kh_categories').select('id,name,emoji').eq('active',true).order('sort_order');if(ce)throw ce;
-  const {data,error}=await sb.from('kh_products').select('id,name,description,emoji,unit,price_iqd,category_id').eq('is_available',true).order('name');if(error)throw error;
+  const {data,error}=await sb.from('kh_products').select('id,name,description,emoji,unit,price_iqd,category_id,image_url').eq('is_available',true).order('name');if(error)throw error;
   products=(data||[]).map(p=>({...p,cat:(cs||[]).find(c=>c.id===p.category_id)?.name||'أخرى'}));
   if(cs&&cs.length)cats=[['الكل','🧺'],...cs.map(c=>[c.name,c.emoji||'🥬'])];
   live=true;
@@ -95,7 +95,8 @@ function ctl(p){
           :`<button class="btn" data-add="${esc(p.id)}">＋ أضف للسلة</button>`;
 }
 function card(p,i){
-  return `<article class="product reveal" style="--i:${i%8};--h:${hue(p.name)}" data-id="${esc(p.id)}"><div class="pic"><span class="emo">${esc(p.emoji||'🥬')}</span><span class="tag">طازج</span></div><div class="pb"><h3>${esc(p.name)}</h3><p>${esc(p.description||'منتج طازج')}</p><div class="price">${money(p.price_iqd)} <small>/ ${esc(p.unit)}</small></div><div class="ctl">${ctl(p)}</div></div></article>`;
+  const pic=p.image_url?`<img class="prod-img" src="${esc(p.image_url)}" alt="${esc(p.name)}" loading="lazy">`:`<span class="emo">${esc(p.emoji||'🥬')}</span>`;
+  return `<article class="product reveal" style="--i:${i%8};--h:${hue(p.name)}" data-id="${esc(p.id)}"><div class="pic">${pic}<span class="tag">طازج</span></div><div class="pb"><h3>${esc(p.name)}</h3><p>${esc(p.description||'منتج طازج')}</p><div class="price">${money(p.price_iqd)} <small>/ ${esc(p.unit)}</small></div><div class="ctl">${ctl(p)}</div></div></article>`;
 }
 function renderProducts(){
   const a=list();
