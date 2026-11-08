@@ -25,9 +25,6 @@
 <a class="logo" href="index.html"><span class="leaf">🌿</span><span>خضارنا<small>من المزرعة إلى بيتك — الناصرية</small></span></a>
 <form id="searchForm" class="search"><span class="ico">🔍</span><input id="search" placeholder="ابحث عن طماطم، خيار، بطاطا..." aria-label="بحث" autocomplete="off"><button>بحث</button></form>
 <button class="iconbtn" type="button" data-theme-toggle aria-label="الوضع الليلي">🌙</button>
-<a class="iconbtn" id="waBtn" href="https://wa.me/9647867226063" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب" title="واتساب">
-  <svg viewBox="0 0 32 32" width="20" height="20" fill="#25D366"><path d="M16.001 3C9.374 3 4 8.373 4 15c0 2.386.697 4.611 1.898 6.484L4 29l7.72-1.864A11.93 11.93 0 0 0 16.001 27C22.627 27 28 21.627 28 15S22.627 3 16.001 3zm0 21.75c-1.99 0-3.845-.58-5.407-1.58l-.388-.242-4.584 1.106 1.148-4.47-.253-.401A9.71 9.71 0 0 1 5.25 15c0-5.93 4.82-10.75 10.751-10.75S26.75 9.07 26.75 15 21.932 24.75 16.001 24.75zm5.633-7.87c-.31-.155-1.83-.903-2.113-1.007-.283-.104-.489-.155-.695.155s-.797 1.007-.978 1.214c-.18.207-.36.233-.669.078-.31-.155-1.308-.482-2.492-1.538-.921-.822-1.543-1.837-1.724-2.147-.18-.31-.019-.477.136-.631.14-.139.31-.362.464-.543.155-.18.206-.31.31-.517.103-.207.051-.388-.026-.543-.078-.155-.695-1.676-.953-2.296-.251-.603-.506-.521-.695-.531l-.593-.01a1.14 1.14 0 0 0-.824.387c-.283.31-1.08 1.056-1.08 2.577s1.106 2.99 1.26 3.197c.155.207 2.177 3.325 5.273 4.662.737.318 1.312.508 1.76.65.74.235 1.413.202 1.945.123.593-.089 1.83-.748 2.088-1.47.258-.722.258-1.341.18-1.47-.077-.129-.283-.207-.593-.362z"/></svg>
-</a>
 <button class="iconbtn" type="button" id="logoutBtn" aria-label="تسجيل الخروج" title="تسجيل الخروج" hidden>🚪</button>
 <button class="btn cartbtn" id="cartOpen" type="button"><span class="cico">🛒</span><span class="lbl">السلة</span><span class="badge-n" id="count">0</span></button>
 </div>
@@ -67,6 +64,14 @@
 <div id="overlay" class="overlay"><aside class="drawer" role="dialog" aria-label="سلة المشتريات"><div class="dhead"><h2>🧺 سلة المشتريات</h2><button class="close" id="cartClose" type="button" aria-label="إغلاق">✕</button></div><div id="cartItems"></div><div id="checkout"></div></aside></div>
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 <button class="fab" id="toTop" type="button" aria-label="للأعلى">↑</button>
+
+<a id="waFloat" href="https://wa.me/9647867226063" target="_blank" rel="noopener" aria-label="تواصل عبر واتساب">
+  <svg viewBox="0 0 32 32" width="28" height="28" fill="#fff"><path d="M16.001 3C9.374 3 4 8.373 4 15c0 2.386.697 4.611 1.898 6.484L4 29l7.72-1.864A11.93 11.93 0 0 0 16.001 27C22.627 27 28 21.627 28 15S22.627 3 16.001 3zm0 21.75c-1.99 0-3.845-.58-5.407-1.58l-.388-.242-4.584 1.106 1.148-4.47-.253-.401A9.71 9.71 0 0 1 5.25 15c0-5.93 4.82-10.75 10.751-10.75S26.75 9.07 26.75 15 21.932 24.75 16.001 24.75zm5.633-7.87c-.31-.155-1.83-.903-2.113-1.007-.283-.104-.489-.155-.695.155s-.797 1.007-.978 1.214c-.18.207-.36.233-.669.078-.31-.155-1.308-.482-2.492-1.538-.921-.822-1.543-1.837-1.724-2.147-.18-.31-.019-.477.136-.631.14-.139.31-.362.464-.543.155-.18.206-.31.31-.517.103-.207.051-.388-.026-.543-.078-.155-.695-1.676-.953-2.296-.251-.603-.506-.521-.695-.531l-.593-.01a1.14 1.14 0 0 0-.824.387c-.283.31-1.08 1.056-1.08 2.577s1.106 2.99 1.26 3.197c.155.207 2.177 3.325 5.273 4.662.737.318 1.312.508 1.76.65.74.235 1.413.202 1.945.123.593-.089 1.83-.748 2.088-1.47.258-.722.258-1.341.18-1.47-.077-.129-.283-.207-.593-.362z"/></svg>
+</a>
+<style>
+#waFloat{position:fixed;bottom:20px;left:20px;width:56px;height:56px;background:#25D366;border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(0,0,0,.25);z-index:999;transition:transform .2s}
+#waFloat:hover{transform:scale(1.08)}
+</style>
 
 <script src="config.js"></script><script src="fx.js"></script><script src="app.js"></script>
 <script src="pwa.js" defer></script>
