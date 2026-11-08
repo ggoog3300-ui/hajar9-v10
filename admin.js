@@ -1,14 +1,34 @@
-const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let sb=null,categories=[],orders=[],products=[],editingProductId=null;const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function configured(){return window.supabase&&cfg.SUPABASE_URL&&!cfg.SUPABASE_URL.includes('YOUR_')&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_ANON_KEY.includes('YOUR_')}
-let noticeT;
-function msg(s){const n=$('notice');n.textContent=s;n.classList.remove('hidden');n.classList.remove('pop');void n.offsetWidth;n.classList.add('pop');clearTimeout(noticeT);noticeT=setTimeout(()=>n.classList.add('hidden'),3000)}
+const cfg=window.KHUDARNA_CONFIG||{};const $=id=>document.getElementById(id);let sb=null,categories=[],orders=[];const money=n=>new Intl.NumberFormat('en-US').format(n)+' د.ع';const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));function configured(){return window.supabase&&cfg.SUPABASE_URL&&!cfg.SUPABASE_URL.includes('YOUR_')&&cfg.SUPABASE_ANON_KEY&&!cfg.SUPABASE_ANON_KEY.includes('YOUR_')}
+function msg(s){const n=$('notice');n.textContent=s;n.classList.remove('hidden');n.classList.remove('pop');void n.offsetWidth;n.classList.add('pop')}
 async function start(){if(!configured()){msg('إعداد Supabase ناقص. عدّل config.js ثم أعد تحميل الصفحة.');return}sb=window.supabase.createClient(cfg.SUPABASE_URL,cfg.SUPABASE_ANON_KEY);const {data:{session}}=await sb.auth.getSession();if(session)await enter();sb.auth.onAuthStateChange((_e,session)=>{if(!session){$('app').classList.add('hidden');$('loginPanel').classList.remove('hidden')}})}
 $('loginForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const {error}=await sb.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});if(error)msg('فشل تسجيل الدخول: '+error.message);else await enter()};
 async function enter(){const {data:{user}}=await sb.auth.getUser();const {data:profile,error}=await sb.from('kh_profiles').select('role,active').eq('id',user.id).single();if(error||!profile||profile.role!=='admin'||!profile.active){await sb.auth.signOut();msg('هذا الحساب ليس لديه صلاحية إدارة نشطة.');return}$('loginPanel').classList.add('hidden');$('app').classList.remove('hidden');msg('تم تسجيل الدخول بأمان.');await loadAll()}
 $('logout').onclick=()=>sb.auth.signOut();document.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{document.querySelectorAll('main section').forEach(s=>s.classList.add('hidden'));$(b.dataset.tab).classList.remove('hidden');document.querySelectorAll('[data-tab]').forEach(x=>x.classList.remove('active'));b.classList.add('active')});
 async function loadAll(){await Promise.all([loadCats(),loadProducts(),loadOrders(),loadZones(),loadCustomers()])}
 async function loadCats(){const {data,error}=await sb.from('kh_categories').select('id,name').eq('active',true).order('sort_order');if(error){msg(error.message);return}categories=data||[];$('categorySelect').innerHTML=categories.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}
-async function loadProducts(){const {data,error}=await sb.from('kh_products').select('id,name,category_id,price_iqd,unit,stock_quantity,is_available,emoji,image_url,description,kh_categories(name)').order('created_at',{ascending:false});if(error){msg(error.message);return}const a=data||[];products=a;FX.count($('statProducts'),a.length);$('productRows').innerHTML=a.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:esc(p.emoji||'🥬')}</td><td>${esc(p.name)}</td><td>${esc(p.kh_categories?.name||'—')}</td><td>${money(p.price_iqd)}</td><td>${p.stock_quantity}</td><td><span class="badge ${p.is_available?'b-yes':'b-no'}">${p.is_available?'نعم':'لا'}</span></td><td><button class="btn" data-edit="${p.id}">تعديل</button> <button class="btn" data-toggle="${p.id}" data-on="${p.is_available}">${p.is_available?'إخفاء':'إظهار'}</button> <button class="btn danger" data-delete="${p.id}">حذف</button></td></tr>`).join('');document.querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>startEditProduct(b.dataset.edit));document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const {error}=await sb.from('kh_products').update({is_available:b.dataset.on!=='true',updated_at:new Date().toISOString()}).eq('id',b.dataset.toggle);if(error)msg(error.message);else loadProducts()});document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف المنتج؟'))return;const {error}=await sb.from('kh_products').delete().eq('id',b.dataset.delete);if(error)msg(error.message);else loadProducts()})}
 const PRODUCT_IMAGE_BUCKET='product-images';
+function storagePathFromUrl(url){
+  if(!url)return null;
+  const marker='/object/public/'+PRODUCT_IMAGE_BUCKET+'/';
+  const i=url.indexOf(marker);
+  if(i===-1)return null;
+  try{return decodeURIComponent(url.slice(i+marker.length))}catch(e){return url.slice(i+marker.length)}
+}
+async function deleteProductImage(url){
+  const path=storagePathFromUrl(url);
+  if(!path)return;
+  try{await sb.storage.from(PRODUCT_IMAGE_BUCKET).remove([path])}catch(e){console.error('تعذر حذف صورة المنتج من التخزين',e)}
+}
+async function loadProducts(){const {data,error}=await sb.from('kh_products').select('id,name,category_id,price_iqd,unit,stock_quantity,is_available,emoji,image_url,kh_categories(name)').order('created_at',{ascending:false});if(error){msg(error.message);return}const a=data||[];FX.count($('statProducts'),a.length);$('productRows').innerHTML=a.map(p=>`<tr><td>${p.image_url?`<img class="thumb" src="${esc(p.image_url)}" alt="">`:esc(p.emoji||'🥬')}</td><td>${esc(p.name)}</td><td>${esc(p.kh_categories?.name||'—')}</td><td>${money(p.price_iqd)}</td><td>${p.stock_quantity}</td><td><span class="badge ${p.is_available?'b-yes':'b-no'}">${p.is_available?'نعم':'لا'}</span></td><td><button class="btn" data-toggle="${p.id}" data-on="${p.is_available}">${p.is_available?'إخفاء':'إظهار'}</button> <button class="btn danger" data-delete="${p.id}" data-image="${esc(p.image_url||'')}">حذف</button></td></tr>`).join('');document.querySelectorAll('[data-toggle]').forEach(b=>b.onclick=async()=>{const {error}=await sb.from('kh_products').update({is_available:b.dataset.on!=='true',updated_at:new Date().toISOString()}).eq('id',b.dataset.toggle);if(error)msg(error.message);else loadProducts()});document.querySelectorAll('[data-delete]').forEach(b=>b.onclick=async()=>{
+  if(!confirm('حذف المنتج؟'))return;
+  b.disabled=true;
+  const imageUrl=b.dataset.image;
+  const {error}=await sb.from('kh_products').delete().eq('id',b.dataset.delete);
+  if(error){msg(error.message);b.disabled=false;return}
+  if(imageUrl)await deleteProductImage(imageUrl);
+  msg('تم حذف المنتج وصورته.');
+  loadProducts();
+})}
 if($('pickImageBtn'))$('pickImageBtn').onclick=()=>$('productImage').click();
 if($('productImage'))$('productImage').onchange=e=>{
   const file=e.target.files&&e.target.files[0],prev=$('productImagePreview'),btn=$('pickImageBtn');
@@ -29,63 +49,20 @@ $('productForm').onsubmit=async e=>{
   const form=e.currentTarget,f=new FormData(form);
   const submitBtn=form.querySelector('button');
   const file=$('productImage')&&$('productImage').files&&$('productImage').files[0];
-  const isEdit=!!editingProductId;
-  const item={name:f.get('name').trim(),category_id:Number(f.get('category_id')),price_iqd:Number(f.get('price_iqd')),unit:f.get('unit'),emoji:f.get('emoji')||'🥬',stock_quantity:Number(f.get('stock_quantity')||0),description:f.get('description')||''};
-  if(!isEdit)item.is_available=true;
-  submitBtn.disabled=true;const origText=submitBtn.textContent;submitBtn.textContent=isEdit?'جارٍ التحديث...':'جارٍ الحفظ...';
+  const item={name:f.get('name').trim(),category_id:Number(f.get('category_id')),price_iqd:Number(f.get('price_iqd')),unit:f.get('unit'),emoji:f.get('emoji')||'🥬',stock_quantity:Number(f.get('stock_quantity')||0),description:f.get('description')||'',is_available:true};
+  submitBtn.disabled=true;const origText=submitBtn.textContent;
   try{
     if(file){submitBtn.textContent='جارٍ رفع الصورة...';item.image_url=await uploadProductImage(file)}
-    let error;
-    if(isEdit){
-      item.updated_at=new Date().toISOString();
-      ({error}=await sb.from('kh_products').update(item).eq('id',editingProductId));
-    }else{
-      ({error}=await sb.from('kh_products').insert(item));
-    }
+    const {error}=await sb.from('kh_products').insert(item);
     if(error)throw error;
-    msg(isEdit?'تم تحديث المنتج.':'تم حفظ المنتج.');
-    cancelEditProduct();
+    msg('تم حفظ المنتج.');form.reset();$('productImagePreview').classList.remove('show');$('productImagePreview').src='';
     await loadProducts();
   }catch(err){
-    msg('تعذر الحفظ: '+(err.message||err));
+    msg('تعذر حفظ المنتج: '+(err.message||err));
   }finally{
-    submitBtn.disabled=false;if(submitBtn.textContent.includes('جارٍ'))submitBtn.textContent=origText;
+    submitBtn.disabled=false;submitBtn.textContent=origText;
   }
 };
-function startEditProduct(id){
-  const p=products.find(x=>String(x.id)===String(id));
-  if(!p)return;
-  editingProductId=p.id;
-  const form=$('productForm');
-  form.name.value=p.name||'';
-  form.category_id.value=p.category_id||'';
-  form.price_iqd.value=p.price_iqd||0;
-  form.unit.value=p.unit||'كغم';
-  form.emoji.value=p.emoji||'🥬';
-  form.stock_quantity.value=p.stock_quantity||0;
-  form.description.value=p.description||'';
-  const prev=$('productImagePreview');
-  if(p.image_url){prev.src=p.image_url;prev.classList.add('show')}else{prev.src='';prev.classList.remove('show')}
-  if($('productImage'))$('productImage').value='';
-  if($('pickImageBtn'))$('pickImageBtn').textContent='📷 تغيير الصورة';
-  form.querySelector('button').textContent='تحديث المنتج';
-  if(!$('cancelEditBtn')){
-    const cancelBtn=document.createElement('button');
-    cancelBtn.type='button';cancelBtn.className='btn danger';cancelBtn.id='cancelEditBtn';cancelBtn.textContent='إلغاء التعديل';cancelBtn.style.marginTop='8px';cancelBtn.style.width='100%';
-    form.querySelector('button').insertAdjacentElement('afterend',cancelBtn);
-    cancelBtn.onclick=cancelEditProduct;
-  }
-  form.scrollIntoView({behavior:'smooth',block:'start'});
-}
-function cancelEditProduct(){
-  editingProductId=null;
-  const form=$('productForm');
-  form.reset();
-  const prev=$('productImagePreview');if(prev){prev.classList.remove('show');prev.src=''}
-  if($('pickImageBtn'))$('pickImageBtn').textContent='📷 إضافة صورة';
-  form.querySelector('button').textContent='حفظ المنتج';
-  if($('cancelEditBtn'))$('cancelEditBtn').remove();
-}
 async function loadOrders(){const {data,error}=await sb.from('kh_orders').select('id,order_number,customer_name,customer_phone,area,total_iqd,status,created_at').order('created_at',{ascending:false}).limit(200);if(error){msg(error.message);return}orders=data||[];FX.count($('statOrders'),orders.filter(o=>o.status==='new').length);FX.count($('statAll'),orders.length);const labels={new:'جديد',confirmed:'مؤكد',preparing:'قيد التجهيز',assigned:'تم تعيين مندوب',out_for_delivery:'في الطريق',delivered:'تم التسليم',cancelled:'ملغي'};$('orderRows').innerHTML=orders.map(o=>`<tr><td>${o.order_number}</td><td>${esc(o.customer_name)}</td><td>${esc(o.customer_phone)}</td><td>${esc(o.area)}</td><td>${money(o.total_iqd)}</td><td><span class="badge st-${esc(o.status)}">${labels[o.status]||esc(o.status)}</span></td><td><select data-status="${o.id}">${Object.entries(labels).map(([k,v])=>`<option value="${k}" ${k===o.status?'selected':''}>${v}</option>`).join('')}</select></td></tr>`).join('');document.querySelectorAll('[data-status]').forEach(s=>s.onchange=async()=>{const {error}=await sb.functions.invoke('admin-update-order',{body:{order_id:s.dataset.status,status:s.value}});if(error){msg('تعذر تحديث الحالة. تأكد من نشر Edge Function.');await loadOrders()}else{msg('تم تحديث حالة الطلب.');await loadOrders()}})}
 async function loadZones(){const {data,error}=await sb.from('kh_delivery_zones').select('*').order('name');if(error){msg(error.message);return}$('zoneRows').innerHTML=(data||[]).map(z=>`<tr><td>${esc(z.name)}</td><td>${money(z.fee_iqd)}</td><td><span class="badge ${z.active?'b-yes':'b-no'}">${z.active?'نعم':'لا'}</span></td><td><button class="btn" data-zone-toggle="${z.id}" data-on="${z.active}">${z.active?'إيقاف':'تفعيل'}</button> <button class="btn danger" data-zone-delete="${z.id}">حذف</button></td></tr>`).join('');document.querySelectorAll('[data-zone-toggle]').forEach(b=>b.onclick=async()=>{const {error}=await sb.from('kh_delivery_zones').update({active:b.dataset.on!=='true'}).eq('id',b.dataset.zoneToggle);if(error)msg(error.message);else loadZones()});document.querySelectorAll('[data-zone-delete]').forEach(b=>b.onclick=async()=>{if(!confirm('حذف المنطقة؟'))return;const {error}=await sb.from('kh_delivery_zones').delete().eq('id',b.dataset.zoneDelete);if(error)msg(error.message);else loadZones()})}
 $('zoneForm').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.currentTarget);const {error}=await sb.from('kh_delivery_zones').insert({name:f.get('name').trim(),fee_iqd:Number(f.get('fee_iqd'))});if(error)msg('تعذر إضافة المنطقة: '+error.message);else{msg('تمت إضافة المنطقة.');e.currentTarget.reset();loadZones()}};
