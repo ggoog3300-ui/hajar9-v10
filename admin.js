@@ -268,6 +268,7 @@ function injectCourierTab() {
     };
     const submitBtn = e.currentTarget.querySelector("button");
     submitBtn.disabled = true; submitBtn.textContent = "جارٍ الإضافة...";
+    toast("انتظر قليلاً.. وحدث");
     try {
       const { error } = await sb.functions.invoke("admin-create-courier", { body });
       if (error) throw error;
